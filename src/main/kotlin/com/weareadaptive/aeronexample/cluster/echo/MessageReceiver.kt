@@ -13,6 +13,6 @@ internal class MessageReceiver : EgressListener {
         length: Int,
         header: Header
     ) {
-        println("Received: ${buffer.getLong(offset)}")
+        println("Received: ${buffer.getStringAscii(offset)}")
     }
 }

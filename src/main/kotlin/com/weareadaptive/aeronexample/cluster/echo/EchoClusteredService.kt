@@ -34,7 +34,7 @@ internal class EchoClusteredService : ClusteredService {
         length: Int,
         header: Header
     ) {
-        val message = buffer.getLong(offset)
+        val message = buffer.getStringAscii(offset)
         println("received message: $message")
 
         idleStrategy.reset()

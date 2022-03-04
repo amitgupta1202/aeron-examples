@@ -5,7 +5,7 @@ import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 
 fun main() {
-    val ingressEndpoints = "0=localhost:9000,1=localhost:9100,2=localhost=9200,"
+    val ingressEndpoints = "0=localhost:9000,1=localhost:9100,2=localhost=9200"
     val messageReceiver = MessageReceiver()
     val mediaDriverContext = MediaDriver.Context()
         .threadingMode(ThreadingMode.SHARED)
