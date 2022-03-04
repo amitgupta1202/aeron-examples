@@ -23,28 +23,12 @@ internal class MessageSender(private val cluster: AeronCluster) {
     }
 
     fun sendMessages(random: Random = Random(100), count: Int = 10) {
-        var keepAliveDeadlineMs: Long = 0
-        var nextMessageDeadlineMs = System.currentTimeMillis() + ThreadLocalRandom.current().nextInt(1000)
-        var messagesLeftToSend = count
-        while (!Thread.currentThread().isInterrupted) {
-            val currentTimeMs = System.currentTimeMillis()
-            if (nextMessageDeadlineMs <= currentTimeMs && messagesLeftToSend > 0) {
-                val message = random.nextLong()
-                println("sending message.... $message")
-                sendMessage(message)
-                nextMessageDeadlineMs = currentTimeMs + ThreadLocalRandom.current().nextInt(100)
-                keepAliveDeadlineMs = currentTimeMs + 1000
-                --messagesLeftToSend
-            } else if (keepAliveDeadlineMs <= currentTimeMs) {
-                keepAliveDeadlineMs =
-                    if (messagesLeftToSend > 0) {
-                        cluster.sendKeepAlive()
-                        currentTimeMs + 1000
-                    } else {
-                        break
-                    }
-            }
-            idleStrategy.idle(cluster.pollEgress())
+        for (i in 1..count) {
+            val message = random.nextLong()
+            println("sending message.... $message")
+            sendMessage(message)
+            Thread.sleep(10) //allow time for message to come back
+            idleStrategy.idle(cluster.pollEgress()) //poll the egress if there is something to process
         }
     }
 
