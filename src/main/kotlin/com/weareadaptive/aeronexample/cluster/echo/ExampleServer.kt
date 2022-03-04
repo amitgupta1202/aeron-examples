@@ -17,150 +17,158 @@ import org.agrona.concurrent.NoOpLock
 import org.agrona.concurrent.ShutdownSignalBarrier
 import java.io.File
 
-/*
- Logic shared between client and server to know the port number
- */
-const val CLIENT_FACING_PORT_OFFSET = 2
-fun calculatePort(nodeId: Int, offset: Int) = PORT_BASE + nodeId * PORTS_PER_NODE + offset
-
-
-private const val PORT_BASE = 9000
-private const val PORTS_PER_NODE = 100
-private const val TERM_LENGTH = 64 * 1024
-private const val ARCHIVE_CONTROL_PORT_OFFSET = 1
-private const val MEMBER_FACING_PORT_OFFSET = 3
-private const val LOG_PORT_OFFSET = 4
-private const val TRANSFER_PORT_OFFSET = 5
-private const val LOG_CONTROL_PORT_OFFSET = 6
-
-private fun clusterMembers(hostnames: List<String>): String {
-    fun StringBuilder.appendPort(nodeId: Int, hostname: String, port: Int) = this
-        .append(',')
-        .append(hostname)
-        .append(':')
-        .append(calculatePort(nodeId, port))
-
-    return hostnames.foldIndexed(StringBuilder()) { i, sb, hostname ->
-        sb.append(i)
-        sb.appendPort(i, hostname, CLIENT_FACING_PORT_OFFSET)
-        sb.appendPort(i, hostname, MEMBER_FACING_PORT_OFFSET)
-        sb.appendPort(i, hostname, LOG_PORT_OFFSET)
-        sb.appendPort(i, hostname, TRANSFER_PORT_OFFSET)
-        sb.appendPort(i, hostname, ARCHIVE_CONTROL_PORT_OFFSET)
-        sb.append('|')
-    }.toString()
-}
-
-private fun errorHandler(context: String) = ErrorHandler { throwable: Throwable ->
-    System.err.println(context)
-    throwable.printStackTrace(System.err)
-}
-
-private fun startServer(nodeId: Int, service: ClusteredService) {
-    val hostnames = listOf("localhost", "localhost", "localhost")
-    val baseDir = File(System.getProperty("user.dir"), "node$nodeId")
-    val aeronDirName = CommonContext.getAeronDirectoryName() + "-" + nodeId + "-driver"
-    val hostname: String = hostnames[nodeId]
-    val barrier = ShutdownSignalBarrier()
-
-    val mediaDriverContext = MediaDriver.Context()
-        .aeronDirectoryName(aeronDirName)
-        .threadingMode(ThreadingMode.SHARED)
-        .termBufferSparseFile(true)
-        .multicastFlowControlSupplier(MinMulticastFlowControlSupplier())
-        .terminationHook(barrier::signal)
-        .errorHandler(errorHandler("Media Driver"))
-
-    val replicationArchiveContext = AeronArchive.Context()
-        .controlResponseChannel("aeron:udp?endpoint=$hostname:0")
-        .errorHandler(errorHandler("Replication Archiver"))
-
-    val controlChannel = calculatePort(nodeId, ARCHIVE_CONTROL_PORT_OFFSET).let { port ->
-        ChannelUriStringBuilder()
-            .media("udp")
-            .termLength(TERM_LENGTH)
-            .endpoint("$hostname:$port")
-            .build()
+class AeronServerNode(
+    private val service: ClusteredService,
+    private val nodeId: Int,
+    private val hostnames: List<String> = listOf("localhost", "localhost", "localhost"),
+    private val clientPorts: List<Int> = listOf(9000, 9100, 9200),
+    private val archiveControlPortOffset: Int = 1,
+    private val memberPortOffset: Int = 2,
+    private val logPortOffset: Int = 3,
+    private val transferPortOffset: Int = 4,
+    private val logControlPortOffset: Int = 5
+) {
+    init {
+        require(nodeId in 0..2) { "invalid nodeId" }
+        require(hostnames.size == 3) { "invalid number of hostnames" }
+        require(clientPorts.size == 3) { "invalid number of hostnames" }
     }
 
-    val archiveContext = Archive.Context()
-        .aeronDirectoryName(aeronDirName)
-        .archiveDir(File(baseDir, "archive"))
-        .controlChannel(controlChannel)
-        .archiveClientContext(replicationArchiveContext)
-        .localControlChannel("aeron:ipc?term-length=64k")
-        .recordingEventsEnabled(false)
-        .threadingMode(ArchiveThreadingMode.SHARED)
-        .errorHandler(errorHandler("Archiver"))
+    private val hostname: String
+        get() = hostnames[nodeId]
 
-    val aeronArchiveContext = AeronArchive.Context()
-        .lock(NoOpLock.INSTANCE)
-        .controlRequestChannel(archiveContext.localControlChannel())
-        .controlRequestStreamId(archiveContext.localControlStreamId())
-        .controlResponseChannel(archiveContext.localControlChannel())
-        .aeronDirectoryName(aeronDirName)
+    fun start() {
+        val baseDir = File(System.getProperty("user.dir") + "/data", "node$nodeId")
+        val aeronDirName = CommonContext.getAeronDirectoryName() + "-" + nodeId + "-driver"
+        val barrier = ShutdownSignalBarrier()
 
-    val logChannel = calculatePort(nodeId, LOG_CONTROL_PORT_OFFSET).let { port ->
-        ChannelUriStringBuilder()
+        val mediaDriverContext = MediaDriver.Context()
+            .aeronDirectoryName(aeronDirName)
+            .threadingMode(ThreadingMode.SHARED)
+            .termBufferSparseFile(true)
+            .multicastFlowControlSupplier(MinMulticastFlowControlSupplier())
+            .terminationHook(barrier::signal)
+            .errorHandler(errorHandler("Media Driver"))
+
+        val replicationArchiveContext = AeronArchive.Context()
+            .controlResponseChannel("aeron:udp?endpoint=$hostname:0")
+            .errorHandler(errorHandler("Replication Archiver"))
+
+        val controlChannel = ChannelUriStringBuilder()
+            .media("udp")
+            .termLength(TERM_LENGTH)
+            .endpoint("$hostname:${clientPorts[nodeId] + archiveControlPortOffset}")
+            .build()
+
+        val archiveContext = Archive.Context()
+            .aeronDirectoryName(aeronDirName)
+            .archiveDir(File(baseDir, "archive"))
+            .controlChannel(controlChannel)
+            .archiveClientContext(replicationArchiveContext)
+            .localControlChannel("aeron:ipc?term-length=64k")
+            .recordingEventsEnabled(false)
+            .threadingMode(ArchiveThreadingMode.SHARED)
+            .errorHandler(errorHandler("Archiver"))
+
+        val aeronArchiveContext = AeronArchive.Context()
+            .lock(NoOpLock.INSTANCE)
+            .controlRequestChannel(archiveContext.localControlChannel())
+            .controlRequestStreamId(archiveContext.localControlStreamId())
+            .controlResponseChannel(archiveContext.localControlChannel())
+            .aeronDirectoryName(aeronDirName)
+
+        val logChannel = ChannelUriStringBuilder()
             .media("udp")
             .termLength(TERM_LENGTH)
             .controlMode(CommonContext.MDC_CONTROL_MODE_MANUAL)
-            .controlEndpoint("$hostname:$port")
+            .controlEndpoint("$hostname:${clientPorts[nodeId] + logControlPortOffset}")
             .build()
+
+        val replicationChannel = ChannelUriStringBuilder()
+            .media("udp")
+            .endpoint("$hostname:0")
+            .build()
+
+        val clusterMembers = clusterMembers(hostnames, clientPorts)
+
+        val consensusModuleContext = ConsensusModule.Context()
+            .clusterMemberId(nodeId)
+            .clusterMembers(clusterMembers)
+            .clusterDir(File(baseDir, "cluster"))
+            .ingressChannel("aeron:udp?term-length=64k")
+            .logChannel(logChannel)
+            .replicationChannel(replicationChannel)
+            .archiveContext(aeronArchiveContext.clone())
+            .errorHandler(errorHandler("Consensus Module"))
+
+        val clusteredServiceContext = ClusteredServiceContainer.Context()
+            .aeronDirectoryName(aeronDirName)
+            .archiveContext(aeronArchiveContext.clone())
+            .clusterDir(File(baseDir, "cluster"))
+            .clusteredService(service)
+            .errorHandler(errorHandler("Clustered Service"))
+
+        ClusteredMediaDriver.launch(mediaDriverContext, archiveContext, consensusModuleContext).use {
+            ClusteredServiceContainer.launch(clusteredServiceContext).use {
+                println("[$nodeId] Started Cluster Node on $hostname...")
+                barrier.await()
+                println("[$nodeId] Exiting")
+            }
+        }
     }
 
-    val replicationChannel = ChannelUriStringBuilder()
-        .media("udp")
-        .endpoint("$hostname:0")
-        .build()
+    private fun clusterMembers(hostnames: List<String>, clientPorts: List<Int>): String {
+        fun StringBuilder.appendPort(hostname: String, port: Int) = this
+            .append(',')
+            .append(hostname)
+            .append(':')
+            .append(port)
 
-    val clusterMembers = clusterMembers(hostnames)
-    println(clusterMembers)
+        return hostnames.foldIndexed(StringBuilder()) { i, sb, hostname ->
+            sb.append(i)
+            sb.appendPort(hostname, clientPorts[i])
+            sb.appendPort(hostname, clientPorts[i] + memberPortOffset)
+            sb.appendPort(hostname, clientPorts[i] + logPortOffset)
+            sb.appendPort(hostname, clientPorts[i] + transferPortOffset)
+            sb.appendPort(hostname, clientPorts[i] + archiveControlPortOffset)
+            sb.append('|')
+        }.toString()
+    }
 
-    val consensusModuleContext = ConsensusModule.Context()
-        .clusterMemberId(nodeId)
-        .clusterMembers(clusterMembers)
-        .clusterDir(File(baseDir, "cluster"))
-        .ingressChannel("aeron:udp?term-length=64k")
-        .logChannel(logChannel)
-        .replicationChannel(replicationChannel)
-        .archiveContext(aeronArchiveContext.clone())
-        .errorHandler(errorHandler("Consensus Module"))
+    private fun errorHandler(context: String) = ErrorHandler { throwable: Throwable ->
+        System.err.println(context)
+        throwable.printStackTrace(System.err)
+    }
 
-    val clusteredServiceContext = ClusteredServiceContainer.Context()
-        .aeronDirectoryName(aeronDirName)
-        .archiveContext(aeronArchiveContext.clone())
-        .clusterDir(File(baseDir, "cluster"))
-        .clusteredService(service)
-        .errorHandler(errorHandler("Clustered Service"))
-
-    ClusteredMediaDriver.launch(mediaDriverContext, archiveContext, consensusModuleContext).use {
-        ClusteredServiceContainer.launch(clusteredServiceContext).use {
-            println("[$nodeId] Started Cluster Node on $hostname...")
-            barrier.await()
-            println("[$nodeId] Exiting")
-        }
+    companion object {
+        private const val TERM_LENGTH = 64 * 1024
     }
 }
 
 object Node0 {
+    private val node = AeronServerNode(EchoClusteredService(), 0)
+
     @JvmStatic
     fun main(args: Array<String>) {
-        startServer(0, EchoClusteredService())
+        node.start()
     }
 }
 
 object Node1 {
+    private val node = AeronServerNode(EchoClusteredService(), 1)
+
     @JvmStatic
     fun main(args: Array<String>) {
-        startServer(1, EchoClusteredService())
+        node.start()
     }
 }
 
 object Node2 {
+    private val node = AeronServerNode(EchoClusteredService(), 2)
+
     @JvmStatic
     fun main(args: Array<String>) {
-        startServer(2, EchoClusteredService())
+        node.start()
     }
 }
 

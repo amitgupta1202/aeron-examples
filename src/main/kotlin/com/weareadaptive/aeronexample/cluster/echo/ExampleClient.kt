@@ -4,23 +4,9 @@ import io.aeron.cluster.client.AeronCluster
 import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 
-private fun Array<String>.asIngressEndpoints() = this
-    .foldIndexed(StringBuilder()) { i, sb, hostname ->
-        sb.append(i)
-            .append('=')
-            .append(hostname)
-            .append(':')
-            .append(calculatePort(i, CLIENT_FACING_PORT_OFFSET))
-            .append(',')
-    }.let {
-        it.setLength(it.length - 1)
-        it.toString()
-    }
-
 fun main() {
-    val ingressEndpoints = arrayOf("localhost", "localhost", "localhost").asIngressEndpoints()
+    val ingressEndpoints = "0=localhost:9000,1=localhost:9100,2=localhost=9200,"
     val messageReceiver = MessageReceiver()
-
     val mediaDriverContext = MediaDriver.Context()
         .threadingMode(ThreadingMode.SHARED)
         .dirDeleteOnStart(true)
