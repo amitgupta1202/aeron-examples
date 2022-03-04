@@ -33,32 +33,6 @@ private const val LOG_PORT_OFFSET = 4
 private const val TRANSFER_PORT_OFFSET = 5
 private const val LOG_CONTROL_PORT_OFFSET = 6
 
-@Suppress("SameParameterValue")
-private fun udpChannel(nodeId: Int, hostname: String, portOffset: Int) =
-    calculatePort(nodeId, portOffset).let { port ->
-        ChannelUriStringBuilder()
-            .media("udp")
-            .termLength(TERM_LENGTH)
-            .endpoint("$hostname:$port")
-            .build()
-    }
-
-@Suppress("SameParameterValue")
-private fun logControlChannel(nodeId: Int, hostname: String, portOffset: Int) =
-    calculatePort(nodeId, portOffset).let { port ->
-        ChannelUriStringBuilder()
-            .media("udp")
-            .termLength(TERM_LENGTH)
-            .controlMode(CommonContext.MDC_CONTROL_MODE_MANUAL)
-            .controlEndpoint("$hostname:$port")
-            .build()
-    }
-
-private fun logReplicationChannel(hostname: String) = ChannelUriStringBuilder()
-    .media("udp")
-    .endpoint("$hostname:0")
-    .build()
-
 private fun clusterMembers(hostnames: List<String>): String {
     fun StringBuilder.appendPort(nodeId: Int, hostname: String, port: Int) = this
         .append(',')
@@ -101,10 +75,18 @@ private fun startServer(nodeId: Int, service: ClusteredService) {
         .controlResponseChannel("aeron:udp?endpoint=$hostname:0")
         .errorHandler(errorHandler("Replication Archiver"))
 
+    val controlChannel = calculatePort(nodeId, 1).let { port ->
+        ChannelUriStringBuilder()
+            .media("udp")
+            .termLength(TERM_LENGTH)
+            .endpoint("$hostname:$port")
+            .build()
+    }
+
     val archiveContext = Archive.Context()
         .aeronDirectoryName(aeronDirName)
         .archiveDir(File(baseDir, "archive"))
-        .controlChannel(udpChannel(nodeId, hostname, 1))
+        .controlChannel(controlChannel)
         .archiveClientContext(replicationArchiveContext)
         .localControlChannel("aeron:ipc?term-length=64k")
         .recordingEventsEnabled(false)
@@ -118,13 +100,29 @@ private fun startServer(nodeId: Int, service: ClusteredService) {
         .controlResponseChannel(archiveContext.localControlChannel())
         .aeronDirectoryName(aeronDirName)
 
+    val logChannel = calculatePort(nodeId, LOG_CONTROL_PORT_OFFSET).let { port ->
+        ChannelUriStringBuilder()
+            .media("udp")
+            .termLength(TERM_LENGTH)
+            .controlMode(CommonContext.MDC_CONTROL_MODE_MANUAL)
+            .controlEndpoint("$hostname:$port")
+            .build()
+    }
+
+    val replicationChannel = ChannelUriStringBuilder()
+        .media("udp")
+        .endpoint("$hostname:0")
+        .build()
+
+    val clusterMembers = clusterMembers(hostnames)
+
     val consensusModuleContext = ConsensusModule.Context()
         .clusterMemberId(nodeId)
-        .clusterMembers(clusterMembers(hostnames))
+        .clusterMembers(clusterMembers)
         .clusterDir(File(baseDir, "cluster"))
         .ingressChannel("aeron:udp?term-length=64k")
-        .logChannel(logControlChannel(nodeId, hostname, LOG_CONTROL_PORT_OFFSET))
-        .replicationChannel(logReplicationChannel(hostname))
+        .logChannel(logChannel)
+        .replicationChannel(replicationChannel)
         .archiveContext(aeronArchiveContext.clone())
         .errorHandler(errorHandler("Consensus Module"))
 
