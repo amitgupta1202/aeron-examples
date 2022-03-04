@@ -75,7 +75,7 @@ private fun startServer(nodeId: Int, service: ClusteredService) {
         .controlResponseChannel("aeron:udp?endpoint=$hostname:0")
         .errorHandler(errorHandler("Replication Archiver"))
 
-    val controlChannel = calculatePort(nodeId, 1).let { port ->
+    val controlChannel = calculatePort(nodeId, ARCHIVE_CONTROL_PORT_OFFSET).let { port ->
         ChannelUriStringBuilder()
             .media("udp")
             .termLength(TERM_LENGTH)
@@ -115,6 +115,7 @@ private fun startServer(nodeId: Int, service: ClusteredService) {
         .build()
 
     val clusterMembers = clusterMembers(hostnames)
+    println(clusterMembers)
 
     val consensusModuleContext = ConsensusModule.Context()
         .clusterMemberId(nodeId)
