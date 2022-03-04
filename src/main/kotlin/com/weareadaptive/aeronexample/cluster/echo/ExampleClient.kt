@@ -19,7 +19,7 @@ fun main() {
     MediaDriver.launchEmbedded(mediaDriverContext).use { mediaDriver ->
         aeronClusterContext.aeronDirectoryName(mediaDriver.aeronDirectoryName())
         AeronCluster.connect(aeronClusterContext).use { aeronCluster ->
-            MessageSender(aeronCluster).sendMessages()
+            MessageSender(aeronCluster).sendAndReceiveMessages()
         }
     }
 }

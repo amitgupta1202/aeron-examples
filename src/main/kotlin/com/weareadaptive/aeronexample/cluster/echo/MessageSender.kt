@@ -1,13 +1,11 @@
 package com.weareadaptive.aeronexample.cluster.echo
 
 import io.aeron.cluster.client.AeronCluster
-import org.agrona.BitUtil
 import org.agrona.BitUtil.SIZE_OF_LONG
 import org.agrona.ExpandableArrayBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.concurrent.IdleStrategy
-import java.util.concurrent.ThreadLocalRandom
 import kotlin.random.Random
 
 internal class MessageSender(private val cluster: AeronCluster) {
@@ -22,7 +20,7 @@ internal class MessageSender(private val cluster: AeronCluster) {
         }
     }
 
-    fun sendMessages(random: Random = Random(100), count: Int = 10) {
+    fun sendAndReceiveMessages(random: Random = Random(100), count: Int = 10) {
         for (i in 1..count) {
             val message = random.nextLong()
             println("sending message.... $message")
