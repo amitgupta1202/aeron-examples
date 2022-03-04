@@ -27,7 +27,7 @@ internal class MessageSender(private val cluster: AeronCluster) {
             val message = random.nextLong()
             println("sending message.... $message")
             sendMessage(message)
-            Thread.sleep(10) //allow time for message to come back
+            Thread.sleep(10) //allow time for message to come back, [DO NOT DO THIS IN REAL CODE]
             idleStrategy.idle(cluster.pollEgress()) //poll the egress if there is something to process
         }
     }
