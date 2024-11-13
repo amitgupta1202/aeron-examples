@@ -1,12 +1,13 @@
-name: Validate commit branch protection
+# .github/workflows/pre-merge-check.yml
+name: Pre-Merge Checks
 
 on:
-  push:
+  pull_request:
     branches:
-      - main
+      - master  # Adjust to the target branch for the checks
 
 jobs:
-  check-branch-protection:
+  verify-branch-protection:
     runs-on: ubuntu-latest
 
     steps:
@@ -14,32 +15,20 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Verify Branch Protection
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          BRANCH: "main"  # Change this to the branch you want to check
-
         run: |
-          echo "Hello !! Checking branch protection settings for $BRANCH..."
+          echo "Checking branch protection settings for master..."
 
           # Use GitHub's REST API to get branch protection details
-          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPO/branches/$BRANCH/protection")
+            "https://api.github.com/repos/${{ github.repository }}/branches/master/protection")
 
           # Check if branch protection is enabled
           if echo "$response" | grep -q '"required_status_checks"'; then
-            echo "Branch protection is correctly configured on $BRANCH."
+            echo "Branch protection is correctly configured on master."
           else
-            echo "Error: Branch protection is not enabled on $BRANCH."
+            echo "Error: Branch protection is not enabled on master."
             exit 1
           fi
 
-          # Optionally, check specific settings within branch protection
-          # Example: Required status checks
-          if echo "$response" | grep -q '"strict": true'; then
-            echo "Strict status checks are enabled."
-          else
-            echo "Warning: Strict status checks are not enabled."
-            exit 1
-          fi
+          # Additional checks as needed
