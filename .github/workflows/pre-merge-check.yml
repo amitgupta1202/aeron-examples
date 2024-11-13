@@ -4,7 +4,7 @@ name: Pre-Merge Checks
 on:
   pull_request:
     branches:
-      - master  # Adjust to the target branch for the checks
+      - main  # Adjust to the target branch for the checks
 
 jobs:
   verify-branch-protection:
