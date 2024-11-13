@@ -20,7 +20,7 @@ jobs:
           BRANCH: "main"  # Change this to the branch you want to check
 
         run: |
-          echo "Checking branch protection settings for $BRANCH..."
+          echo "Hello !! Checking branch protection settings for $BRANCH..."
 
           # Use GitHub's REST API to get branch protection details
           response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
