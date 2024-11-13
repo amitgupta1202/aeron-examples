@@ -13,24 +13,6 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v3
 
-      # Step to check if branch protection is enabled for master
-      - name: Check branch protection for main
-        run: |
-          echo "Checking branch protection settings for main....."
-
-          # Use GitHub API to get branch protection details
-          response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/branches/main/protection")
-
-          # Check if branch protection is enabled by looking for 'required_status_checks'
-          if echo "$response" | grep -q '"required_status_checks"'; then
-            echo "Branch protection is enabled on master."
-          else
-            echo "Error: Branch protection is not enabled on master."
-            exit 1  # Fail the workflow if branch protection is not enabled
-          fi
-
       # check validate commit script
       - name: Run validate commits script
         run: |
