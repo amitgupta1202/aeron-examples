@@ -16,7 +16,7 @@ jobs:
       # Step to check if branch protection is enabled for master
       - name: Check branch protection for main
         run: |
-          echo "Checking branch protection settings for main..."
+          echo "Checking branch protection settings for main....."
 
           # Use GitHub API to get branch protection details
           response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
